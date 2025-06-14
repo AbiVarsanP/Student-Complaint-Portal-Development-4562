@@ -1,12 +1,11 @@
 import express from 'express';
 import cors from 'cors';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import dotenv from 'dotenv';
 import { Database } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,22 +14,46 @@ const PORT = process.env.PORT || 3001;
 const db = new Database();
 
 // Middleware
+const corsOrigins = process.env.CORS_ORIGINS?.split(',') || [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173'
+];
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+  origin: corsOrigins,
   credentials: true
 }));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
 
 // API Routes
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    database: 'Connected'
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    // Test database connection
+    await db.pool.query('SELECT 1');
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      database: 'Connected to Neon PostgreSQL'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'ERROR', 
+      timestamp: new Date().toISOString(),
+      database: 'Connection failed',
+      error: error.message
+    });
+  }
 });
 
 // Get all complaints
@@ -258,21 +281,36 @@ app.post('/api/admin/login', async (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Unhandled error:', err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 STD-Campuz server running on port ${PORT}`);
-  console.log(`📊 Database: SQLite (campuz.db)`);
+  console.log(`📊 Database: Neon PostgreSQL`);
   console.log(`🌐 Access API at: http://localhost:${PORT}/api`);
   console.log(`💻 Frontend should run on: http://localhost:5173`);
+  console.log(`🔗 Database URL: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down server...');
-  db.close();
-  process.exit(0);
-});
+const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
+  
+  try {
+    await db.close();
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

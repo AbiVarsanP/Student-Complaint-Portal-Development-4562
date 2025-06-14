@@ -13,228 +13,254 @@ export const useComplaints = () => {
 
 export const ComplaintProvider = ({ children }) => {
   const [complaints, setComplaints] = useState([]);
-  const [categories, setCategories] = useState([
-    'Campus',
-    'Hostel',
-    'Roadways',
-    'Transport/Bus',
-    'Others'
-  ]);
-  const [locations, setLocations] = useState([
-    'Main Campus',
-    'Hostel A',
-    'Hostel B', 
-    'Hostel C',
-    'Block A',
-    'Block B',
-    'Block C',
-    'Library',
-    'Cafeteria',
-    'Sports Complex',
-    'Auditorium',
-    'Parking Area',
-    'Main Gate',
-    'Administrative Block'
-  ]);
+  const [categories, setCategories] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Enhanced storage keys for better data persistence
-  const STORAGE_KEYS = {
-    complaints: 'std-campuz-complaints-v2',
-    categories: 'std-campuz-categories-v2',
-    locations: 'std-campuz-locations-v2',
-    userSupport: 'std-campuz-user-support-v2'
-  };
+  // API base URL - automatically detects environment
+  const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
 
   useEffect(() => {
-    loadFromStorage();
-    setLoading(false);
-    
-    // Set up periodic data sync (simulating real-time updates)
-    const interval = setInterval(() => {
-      // Check for updates from other tabs/windows
-      const event = new CustomEvent('std-campuz-data-sync');
-      window.dispatchEvent(event);
-    }, 30000);
-
-    // Listen for storage changes from other tabs
-    const handleStorageChange = () => {
-      loadFromStorage();
-    };
-
-    const handleDataSync = () => {
-      loadFromStorage();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('std-campuz-data-sync', handleDataSync);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('std-campuz-data-sync', handleDataSync);
-    };
+    fetchData();
+    // Set up polling for real-time updates every 30 seconds
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  const loadFromStorage = () => {
+  const fetchData = async () => {
     try {
-      const savedComplaints = localStorage.getItem(STORAGE_KEYS.complaints);
-      const savedCategories = localStorage.getItem(STORAGE_KEYS.categories);
-      const savedLocations = localStorage.getItem(STORAGE_KEYS.locations);
-      
+      const [complaintsRes, categoriesRes, locationsRes] = await Promise.all([
+        fetch(`${API_BASE}/complaints`),
+        fetch(`${API_BASE}/categories`),
+        fetch(`${API_BASE}/locations`)
+      ]);
+
+      if (complaintsRes.ok && categoriesRes.ok && locationsRes.ok) {
+        const [complaintsData, categoriesData, locationsData] = await Promise.all([
+          complaintsRes.json(),
+          categoriesRes.json(),
+          locationsRes.json()
+        ]);
+
+        setComplaints(complaintsData);
+        setCategories(categoriesData);
+        setLocations(locationsData);
+      } else {
+        console.error('Failed to fetch data from server');
+        // Fallback to localStorage if server is unavailable
+        const savedComplaints = localStorage.getItem('std-campuz-complaints');
+        if (savedComplaints) {
+          setComplaints(JSON.parse(savedComplaints));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      // Fallback to localStorage if server is unavailable
+      const savedComplaints = localStorage.getItem('std-campuz-complaints');
       if (savedComplaints) {
-        const parsedComplaints = JSON.parse(savedComplaints);
-        // Ensure all complaints have required fields
-        const validatedComplaints = parsedComplaints.map(complaint => ({
-          ...complaint,
-          supportCount: complaint.supportCount || 0,
-          comments: complaint.comments || [],
-          supportedBy: complaint.supportedBy || []
-        }));
-        setComplaints(validatedComplaints);
+        setComplaints(JSON.parse(savedComplaints));
       }
-      
-      if (savedCategories) {
-        setCategories(JSON.parse(savedCategories));
-      }
-
-      if (savedLocations) {
-        setLocations(JSON.parse(savedLocations));
-      }
-    } catch (error) {
-      console.error('Error loading data from storage:', error);
-    }
-  };
-
-  const saveToStorage = (complaintsData = complaints, categoriesData = categories, locationsData = locations) => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.complaints, JSON.stringify(complaintsData));
-      localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(categoriesData));
-      localStorage.setItem(STORAGE_KEYS.locations, JSON.stringify(locationsData));
-      
-      // Trigger sync event for other tabs
-      const event = new CustomEvent('std-campuz-data-sync');
-      window.dispatchEvent(event);
-    } catch (error) {
-      console.error('Error saving data to storage:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const addComplaint = async (complaint) => {
-    const newComplaint = {
-      id: uuidv4(),
-      ...complaint,
-      status: 'pending',
-      submittedAt: new Date().toISOString(),
-      supportCount: 0,
-      supportedBy: [],
-      comments: []
-    };
-    
-    const updatedComplaints = [...complaints, newComplaint];
-    setComplaints(updatedComplaints);
-    saveToStorage(updatedComplaints);
-    
-    return newComplaint.id;
+    try {
+      const response = await fetch(`${API_BASE}/complaints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(complaint),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        await fetchData(); // Refresh data
+        return data.id;
+      }
+      throw new Error(data.error);
+    } catch (error) {
+      console.error('Error adding complaint:', error);
+      throw error;
+    }
   };
 
   const updateComplaintStatus = async (id, status) => {
-    const updatedComplaints = complaints.map(complaint =>
-      complaint.id === id ? { ...complaint, status, updatedAt: new Date().toISOString() } : complaint
-    );
-    setComplaints(updatedComplaints);
-    saveToStorage(updatedComplaints);
+    try {
+      const response = await fetch(`${API_BASE}/complaints/${id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (response.ok) {
+        await fetchData(); // Refresh data
+      } else {
+        throw new Error('Failed to update status');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      throw error;
+    }
   };
 
   const deleteComplaint = async (id) => {
-    const updatedComplaints = complaints.filter(complaint => complaint.id !== id);
-    setComplaints(updatedComplaints);
-    saveToStorage(updatedComplaints);
+    try {
+      const response = await fetch(`${API_BASE}/complaints/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchData(); // Refresh data
+      } else {
+        throw new Error('Failed to delete complaint');
+      }
+    } catch (error) {
+      console.error('Error deleting complaint:', error);
+      throw error;
+    }
   };
 
   const addCategory = async (category) => {
-    if (!categories.includes(category)) {
-      const updatedCategories = [...categories, category];
-      setCategories(updatedCategories);
-      saveToStorage(complaints, updatedCategories, locations);
+    try {
+      const response = await fetch(`${API_BASE}/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: category }),
+      });
+
+      if (response.ok) {
+        await fetchData(); // Refresh data
+      } else {
+        const data = await response.json();
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('Error adding category:', error);
+      throw error;
     }
   };
 
   const deleteCategory = async (category) => {
-    const updatedCategories = categories.filter(cat => cat !== category);
-    setCategories(updatedCategories);
-    saveToStorage(complaints, updatedCategories, locations);
+    try {
+      const response = await fetch(`${API_BASE}/categories/${encodeURIComponent(category)}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchData(); // Refresh data
+      } else {
+        throw new Error('Failed to delete category');
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      throw error;
+    }
   };
 
   const addLocation = async (location) => {
-    if (!locations.includes(location)) {
-      const updatedLocations = [...locations, location];
-      setLocations(updatedLocations);
-      saveToStorage(complaints, categories, updatedLocations);
+    try {
+      const response = await fetch(`${API_BASE}/locations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: location }),
+      });
+
+      if (response.ok) {
+        await fetchData(); // Refresh data
+      } else {
+        const data = await response.json();
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('Error adding location:', error);
+      throw error;
     }
   };
 
   const deleteLocation = async (location) => {
-    const updatedLocations = locations.filter(loc => loc !== location);
-    setLocations(updatedLocations);
-    saveToStorage(complaints, categories, updatedLocations);
+    try {
+      const response = await fetch(`${API_BASE}/locations/${encodeURIComponent(location)}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchData(); // Refresh data
+      } else {
+        throw new Error('Failed to delete location');
+      }
+    } catch (error) {
+      console.error('Error deleting location:', error);
+      throw error;
+    }
   };
 
   const supportComplaint = async (id) => {
-    const userIdentifier = getUserIdentifier();
-    const updatedComplaints = complaints.map(complaint => {
-      if (complaint.id === id) {
-        const alreadySupported = complaint.supportedBy?.includes(userIdentifier);
-        if (alreadySupported) {
-          return {
-            ...complaint,
-            supportCount: Math.max(0, complaint.supportCount - 1),
-            supportedBy: complaint.supportedBy.filter(user => user !== userIdentifier)
-          };
-        } else {
-          return {
-            ...complaint,
-            supportCount: (complaint.supportCount || 0) + 1,
-            supportedBy: [...(complaint.supportedBy || []), userIdentifier]
-          };
-        }
+    try {
+      const userIdentifier = getUserIdentifier();
+      const response = await fetch(`${API_BASE}/complaints/${id}/support`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userIdentifier }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        await fetchData(); // Refresh data
+        return data.isSupported;
       }
-      return complaint;
-    });
-    
-    setComplaints(updatedComplaints);
-    saveToStorage(updatedComplaints);
-    
-    const complaint = updatedComplaints.find(c => c.id === id);
-    return complaint.supportedBy?.includes(userIdentifier);
+      throw new Error(data.error);
+    } catch (error) {
+      console.error('Error toggling support:', error);
+      throw error;
+    }
   };
 
   const hasUserSupported = async (complaintId) => {
-    const userIdentifier = getUserIdentifier();
-    const complaint = complaints.find(c => c.id === complaintId);
-    return complaint?.supportedBy?.includes(userIdentifier) || false;
+    try {
+      const userIdentifier = getUserIdentifier();
+      const response = await fetch(`${API_BASE}/complaints/${complaintId}/support/${userIdentifier}`);
+      const data = await response.json();
+      return data.isSupported;
+    } catch (error) {
+      console.error('Error checking support:', error);
+      return false;
+    }
   };
 
   const addComment = async (complaintId, comment) => {
-    const newComment = {
-      id: uuidv4(),
-      ...comment,
-      timestamp: new Date().toISOString()
-    };
+    try {
+      const response = await fetch(`${API_BASE}/complaints/${complaintId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(comment),
+      });
 
-    const updatedComplaints = complaints.map(complaint => {
-      if (complaint.id === complaintId) {
-        return {
-          ...complaint,
-          comments: [...(complaint.comments || []), newComment]
-        };
+      const data = await response.json();
+      
+      if (response.ok) {
+        await fetchData(); // Refresh data
+        return data.id;
       }
-      return complaint;
-    });
-
-    setComplaints(updatedComplaints);
-    saveToStorage(updatedComplaints);
-    return newComment.id;
+      throw new Error(data.error);
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      throw error;
+    }
   };
 
   const getUserIdentifier = () => {
@@ -247,26 +273,14 @@ export const ComplaintProvider = ({ children }) => {
   };
 
   const getComplaintStats = async () => {
-    const total = complaints.length;
-    const pending = complaints.filter(c => c.status === 'pending').length;
-    const resolved = complaints.filter(c => c.status === 'resolved').length;
-    
-    const byCategory = categories.reduce((acc, category) => {
-      acc[category] = complaints.filter(c => c.category === category).length;
-      return acc;
-    }, {});
-    
-    const byLocation = locations.reduce((acc, location) => {
-      acc[location] = complaints.filter(c => c.location === location).length;
-      return acc;
-    }, {});
-
-    return { total, pending, resolved, byCategory, byLocation };
-  };
-
-  // Real-time data refresh function
-  const refreshData = () => {
-    loadFromStorage();
+    try {
+      const response = await fetch(`${API_BASE}/stats`);
+      const stats = await response.json();
+      return stats;
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      return { total: 0, pending: 0, resolved: 0, byCategory: {}, byLocation: {} };
+    }
   };
 
   const value = {
@@ -285,7 +299,7 @@ export const ComplaintProvider = ({ children }) => {
     hasUserSupported,
     addComment,
     getComplaintStats,
-    refreshData
+    refreshData: fetchData
   };
 
   return (

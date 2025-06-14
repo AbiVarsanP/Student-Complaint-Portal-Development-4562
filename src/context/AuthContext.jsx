@@ -14,6 +14,9 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // API base URL - automatically detects environment
+  const API_BASE = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
+
   useEffect(() => {
     const token = localStorage.getItem('std-campuz-adminToken');
     if (token) {
@@ -23,13 +26,27 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (username, password) => {
-    // Check credentials - Campuz / Campuz@001
-    if (username === 'Campuz' && password === 'Campuz@001') {
-      localStorage.setItem('std-campuz-adminToken', 'authenticated');
-      setIsAuthenticated(true);
-      return true;
+    try {
+      const response = await fetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        localStorage.setItem('std-campuz-adminToken', 'authenticated');
+        setIsAuthenticated(true);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
