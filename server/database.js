@@ -1,207 +1,185 @@
-import pkg from 'pg';
-import dotenv from 'dotenv';
+import sqlite3 from 'sqlite3';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const { Pool } = pkg;
-
-// Load environment variables
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export class Database {
   constructor() {
-    this.pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
-      },
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+    this.db = new sqlite3.Database(join(__dirname, 'campuz.db'), (err) => {
+      if (err) {
+        console.error('Error opening database:', err);
+      } else {
+        console.log('✅ Connected to SQLite database');
+        this.init();
+      }
     });
-
-    this.init();
   }
 
   // Initialize database tables
-  async init() {
-    try {
-      const client = await this.pool.connect();
-      
-      console.log('✅ Connected to Neon PostgreSQL database');
-
-      // Create tables
-      await this.createTables(client);
-      
-      // Insert default data
-      await this.insertDefaults(client);
-      
-      client.release();
-      console.log('✅ Database initialized successfully');
-    } catch (error) {
-      console.error('❌ Database initialization failed:', error);
-    }
-  }
-
-  async createTables(client) {
+  init() {
     const queries = [
+      // Enable foreign keys
+      `PRAGMA foreign_keys = ON`,
+      
       // Categories table
       `CREATE TABLE IF NOT EXISTS categories (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
       
       // Locations table
       `CREATE TABLE IF NOT EXISTS locations (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
       
       // Complaints table
       `CREATE TABLE IF NOT EXISTS complaints (
-        id VARCHAR(36) PRIMARY KEY,
-        student_name VARCHAR(255),
-        email VARCHAR(255),
-        title VARCHAR(500) NOT NULL,
+        id TEXT PRIMARY KEY,
+        student_name TEXT,
+        email TEXT,
+        title TEXT NOT NULL,
         description TEXT NOT NULL,
-        category VARCHAR(255) NOT NULL,
-        location VARCHAR(255),
-        status VARCHAR(50) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        category TEXT NOT NULL,
+        location TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
       
       // Images table
       `CREATE TABLE IF NOT EXISTS images (
-        id SERIAL PRIMARY KEY,
-        complaint_id VARCHAR(36) NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        complaint_id TEXT NOT NULL,
         image_data TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (complaint_id) REFERENCES complaints (id) ON DELETE CASCADE
       )`,
       
       // Comments table
       `CREATE TABLE IF NOT EXISTS comments (
-        id VARCHAR(36) PRIMARY KEY,
-        complaint_id VARCHAR(36) NOT NULL,
-        name VARCHAR(255) NOT NULL,
+        id TEXT PRIMARY KEY,
+        complaint_id TEXT NOT NULL,
+        name TEXT NOT NULL,
         text TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (complaint_id) REFERENCES complaints (id) ON DELETE CASCADE
       )`,
       
       // Support table
       `CREATE TABLE IF NOT EXISTS support (
-        id SERIAL PRIMARY KEY,
-        complaint_id VARCHAR(36) NOT NULL,
-        user_identifier VARCHAR(36) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        complaint_id TEXT NOT NULL,
+        user_identifier TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(complaint_id, user_identifier),
         FOREIGN KEY (complaint_id) REFERENCES complaints (id) ON DELETE CASCADE
       )`
     ];
 
-    for (const query of queries) {
-      await client.query(query);
-    }
+    // Execute all queries
+    queries.forEach(query => {
+      this.db.run(query, (err) => {
+        if (err) console.error('Error executing query:', err);
+      });
+    });
+
+    // Insert default data
+    this.insertDefaults();
   }
 
-  async insertDefaults(client) {
+  insertDefaults() {
     // Default categories
     const defaultCategories = ['Campus', 'Hostel', 'Roadways', 'Transport/Bus', 'Others'];
-    for (const category of defaultCategories) {
-      await client.query(
-        'INSERT INTO categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
-        [category]
-      );
-    }
+    defaultCategories.forEach(category => {
+      this.db.run('INSERT OR IGNORE INTO categories (name) VALUES (?)', [category]);
+    });
 
     // Default locations
     const defaultLocations = [
       'Main Campus', 'Hostel A', 'Hostel B', 'Hostel C', 'Block A', 'Block B', 'Block C',
       'Library', 'Cafeteria', 'Sports Complex', 'Auditorium', 'Parking Area', 'Main Gate', 'Administrative Block'
     ];
-    for (const location of defaultLocations) {
-      await client.query(
-        'INSERT INTO locations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
-        [location]
-      );
-    }
+    defaultLocations.forEach(location => {
+      this.db.run('INSERT OR IGNORE INTO locations (name) VALUES (?)', [location]);
+    });
   }
 
   // Categories
-  async getCategories() {
-    try {
-      const result = await this.pool.query('SELECT name FROM categories ORDER BY name');
-      return result.rows.map(row => row.name);
-    } catch (error) {
-      console.error('Error getting categories:', error);
-      throw error;
-    }
+  getCategories() {
+    return new Promise((resolve, reject) => {
+      this.db.all('SELECT name FROM categories ORDER BY name', (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows.map(row => row.name));
+      });
+    });
   }
 
-  async addCategory(name) {
-    try {
-      await this.pool.query('INSERT INTO categories (name) VALUES ($1)', [name]);
-      return true;
-    } catch (error) {
-      if (error.code === '23505') { // Unique violation
-        return false;
-      }
-      throw error;
-    }
+  addCategory(name) {
+    return new Promise((resolve, reject) => {
+      this.db.run('INSERT INTO categories (name) VALUES (?)', [name], function(err) {
+        if (err) {
+          if (err.code === 'SQLITE_CONSTRAINT') resolve(false);
+          else reject(err);
+        } else {
+          resolve(true);
+        }
+      });
+    });
   }
 
-  async deleteCategory(name) {
-    try {
-      const result = await this.pool.query('DELETE FROM categories WHERE name = $1', [name]);
-      return result.rowCount > 0;
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      throw error;
-    }
+  deleteCategory(name) {
+    return new Promise((resolve, reject) => {
+      this.db.run('DELETE FROM categories WHERE name = ?', [name], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes > 0);
+      });
+    });
   }
 
   // Locations
-  async getLocations() {
-    try {
-      const result = await this.pool.query('SELECT name FROM locations ORDER BY name');
-      return result.rows.map(row => row.name);
-    } catch (error) {
-      console.error('Error getting locations:', error);
-      throw error;
-    }
+  getLocations() {
+    return new Promise((resolve, reject) => {
+      this.db.all('SELECT name FROM locations ORDER BY name', (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows.map(row => row.name));
+      });
+    });
   }
 
-  async addLocation(name) {
-    try {
-      await this.pool.query('INSERT INTO locations (name) VALUES ($1)', [name]);
-      return true;
-    } catch (error) {
-      if (error.code === '23505') { // Unique violation
-        return false;
-      }
-      throw error;
-    }
+  addLocation(name) {
+    return new Promise((resolve, reject) => {
+      this.db.run('INSERT INTO locations (name) VALUES (?)', [name], function(err) {
+        if (err) {
+          if (err.code === 'SQLITE_CONSTRAINT') resolve(false);
+          else reject(err);
+        } else {
+          resolve(true);
+        }
+      });
+    });
   }
 
-  async deleteLocation(name) {
-    try {
-      const result = await this.pool.query('DELETE FROM locations WHERE name = $1', [name]);
-      return result.rowCount > 0;
-    } catch (error) {
-      console.error('Error deleting location:', error);
-      throw error;
-    }
+  deleteLocation(name) {
+    return new Promise((resolve, reject) => {
+      this.db.run('DELETE FROM locations WHERE name = ?', [name], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes > 0);
+      });
+    });
   }
 
   // Complaints
-  async getComplaints() {
-    try {
-      const complaintsQuery = `
+  getComplaints() {
+    return new Promise((resolve, reject) => {
+      const query = `
         SELECT 
           c.*,
-          string_agg(DISTINCT i.image_data, ',') as images,
+          GROUP_CONCAT(i.image_data) as images,
           COUNT(DISTINCT s.id) as support_count
         FROM complaints c
         LEFT JOIN images i ON c.id = i.complaint_id
@@ -210,234 +188,273 @@ export class Database {
         ORDER BY c.created_at DESC
       `;
 
-      const result = await this.pool.query(complaintsQuery);
-      
-      const complaints = result.rows.map(row => ({
-        id: row.id,
-        studentName: row.student_name,
-        email: row.email,
-        title: row.title,
-        description: row.description,
-        category: row.category,
-        location: row.location,
-        status: row.status,
-        submittedAt: row.created_at,
-        updatedAt: row.updated_at,
-        images: row.images ? row.images.split(',') : [],
-        supportCount: parseInt(row.support_count) || 0,
-        comments: []
-      }));
-
-      // Get comments for each complaint
-      for (const complaint of complaints) {
-        const commentsResult = await this.pool.query(
-          'SELECT id, name, text, created_at as timestamp FROM comments WHERE complaint_id = $1 ORDER BY created_at DESC',
-          [complaint.id]
-        );
-        complaint.comments = commentsResult.rows;
-      }
-
-      return complaints;
-    } catch (error) {
-      console.error('Error getting complaints:', error);
-      throw error;
-    }
-  }
-
-  async addComplaint(complaint) {
-    const client = await this.pool.connect();
-    
-    try {
-      await client.query('BEGIN');
-
-      // Insert complaint
-      await client.query(
-        `INSERT INTO complaints (id, student_name, email, title, description, category, location)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          complaint.id,
-          complaint.studentName || null,
-          complaint.email || null,
-          complaint.title,
-          complaint.description,
-          complaint.category,
-          complaint.location || null
-        ]
-      );
-
-      // Insert images if any
-      if (complaint.images && complaint.images.length > 0) {
-        for (const image of complaint.images) {
-          await client.query(
-            'INSERT INTO images (complaint_id, image_data) VALUES ($1, $2)',
-            [complaint.id, image]
-          );
+      this.db.all(query, (err, rows) => {
+        if (err) {
+          reject(err);
+          return;
         }
-      }
 
-      await client.query('COMMIT');
-      return complaint.id;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Error adding complaint:', error);
-      throw error;
-    } finally {
-      client.release();
-    }
+        const complaints = rows.map(row => ({
+          id: row.id,
+          studentName: row.student_name,
+          email: row.email,
+          title: row.title,
+          description: row.description,
+          category: row.category,
+          location: row.location,
+          status: row.status,
+          submittedAt: row.created_at,
+          updatedAt: row.updated_at,
+          images: row.images ? row.images.split(',') : [],
+          supportCount: row.support_count || 0,
+          comments: []
+        }));
+
+        // Get comments for each complaint
+        const commentPromises = complaints.map(complaint => {
+          return new Promise((resolveComment, rejectComment) => {
+            this.db.all(
+              'SELECT id, name, text, created_at as timestamp FROM comments WHERE complaint_id = ? ORDER BY created_at DESC',
+              [complaint.id],
+              (err, commentRows) => {
+                if (err) rejectComment(err);
+                else {
+                  complaint.comments = commentRows;
+                  resolveComment();
+                }
+              }
+            );
+          });
+        });
+
+        Promise.all(commentPromises)
+          .then(() => resolve(complaints))
+          .catch(reject);
+      });
+    });
   }
 
-  async updateComplaintStatus(id, status) {
-    try {
-      const result = await this.pool.query(
-        'UPDATE complaints SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [status, id]
+  addComplaint(complaint) {
+    return new Promise((resolve, reject) => {
+      this.db.serialize(() => {
+        this.db.run('BEGIN TRANSACTION');
+
+        // Insert complaint
+        this.db.run(
+          `INSERT INTO complaints (id, student_name, email, title, description, category, location)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            complaint.id,
+            complaint.studentName || null,
+            complaint.email || null,
+            complaint.title,
+            complaint.description,
+            complaint.category,
+            complaint.location || null
+          ],
+          (err) => {
+            if (err) {
+              this.db.run('ROLLBACK');
+              reject(err);
+              return;
+            }
+
+            // Insert images if any
+            if (complaint.images && complaint.images.length > 0) {
+              const imagePromises = complaint.images.map(image => {
+                return new Promise((resolveImage, rejectImage) => {
+                  this.db.run(
+                    'INSERT INTO images (complaint_id, image_data) VALUES (?, ?)',
+                    [complaint.id, image],
+                    (err) => {
+                      if (err) rejectImage(err);
+                      else resolveImage();
+                    }
+                  );
+                });
+              });
+
+              Promise.all(imagePromises)
+                .then(() => {
+                  this.db.run('COMMIT');
+                  resolve(complaint.id);
+                })
+                .catch((err) => {
+                  this.db.run('ROLLBACK');
+                  reject(err);
+                });
+            } else {
+              this.db.run('COMMIT');
+              resolve(complaint.id);
+            }
+          }
+        );
+      });
+    });
+  }
+
+  updateComplaintStatus(id, status) {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        'UPDATE complaints SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [status, id],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.changes > 0);
+        }
       );
-      return result.rowCount > 0;
-    } catch (error) {
-      console.error('Error updating complaint status:', error);
-      throw error;
-    }
+    });
   }
 
-  async deleteComplaint(id) {
-    try {
-      const result = await this.pool.query('DELETE FROM complaints WHERE id = $1', [id]);
-      return result.rowCount > 0;
-    } catch (error) {
-      console.error('Error deleting complaint:', error);
-      throw error;
-    }
+  deleteComplaint(id) {
+    return new Promise((resolve, reject) => {
+      this.db.run('DELETE FROM complaints WHERE id = ?', [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes > 0);
+      });
+    });
   }
 
   // Support/Upvote
-  async toggleSupport(complaintId, userIdentifier) {
-    const client = await this.pool.connect();
-    
-    try {
-      await client.query('BEGIN');
+  toggleSupport(complaintId, userIdentifier) {
+    return new Promise((resolve, reject) => {
+      this.db.serialize(() => {
+        // Check if user already supported
+        this.db.get(
+          'SELECT id FROM support WHERE complaint_id = ? AND user_identifier = ?',
+          [complaintId, userIdentifier],
+          (err, row) => {
+            if (err) {
+              reject(err);
+              return;
+            }
 
-      // Check if user already supported
-      const existingSupport = await client.query(
-        'SELECT id FROM support WHERE complaint_id = $1 AND user_identifier = $2',
-        [complaintId, userIdentifier]
-      );
-
-      if (existingSupport.rows.length > 0) {
-        // Remove support
-        await client.query(
-          'DELETE FROM support WHERE complaint_id = $1 AND user_identifier = $2',
-          [complaintId, userIdentifier]
+            if (row) {
+              // Remove support
+              this.db.run(
+                'DELETE FROM support WHERE complaint_id = ? AND user_identifier = ?',
+                [complaintId, userIdentifier],
+                (err) => {
+                  if (err) reject(err);
+                  else resolve(false);
+                }
+              );
+            } else {
+              // Add support
+              this.db.run(
+                'INSERT INTO support (complaint_id, user_identifier) VALUES (?, ?)',
+                [complaintId, userIdentifier],
+                (err) => {
+                  if (err) reject(err);
+                  else resolve(true);
+                }
+              );
+            }
+          }
         );
-        await client.query('COMMIT');
-        return false;
-      } else {
-        // Add support
-        await client.query(
-          'INSERT INTO support (complaint_id, user_identifier) VALUES ($1, $2)',
-          [complaintId, userIdentifier]
-        );
-        await client.query('COMMIT');
-        return true;
-      }
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Error toggling support:', error);
-      throw error;
-    } finally {
-      client.release();
-    }
+      });
+    });
   }
 
-  async hasUserSupported(complaintId, userIdentifier) {
-    try {
-      const result = await this.pool.query(
-        'SELECT id FROM support WHERE complaint_id = $1 AND user_identifier = $2',
-        [complaintId, userIdentifier]
+  hasUserSupported(complaintId, userIdentifier) {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT id FROM support WHERE complaint_id = ? AND user_identifier = ?',
+        [complaintId, userIdentifier],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(!!row);
+        }
       );
-      return result.rows.length > 0;
-    } catch (error) {
-      console.error('Error checking user support:', error);
-      throw error;
-    }
+    });
   }
 
-  async getSupportCount(complaintId) {
-    try {
-      const result = await this.pool.query(
-        'SELECT COUNT(*) as count FROM support WHERE complaint_id = $1',
-        [complaintId]
+  getSupportCount(complaintId) {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT COUNT(*) as count FROM support WHERE complaint_id = ?',
+        [complaintId],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row.count);
+        }
       );
-      return parseInt(result.rows[0].count) || 0;
-    } catch (error) {
-      console.error('Error getting support count:', error);
-      throw error;
-    }
+    });
   }
 
   // Comments
-  async addComment(comment) {
-    try {
-      await this.pool.query(
+  addComment(comment) {
+    return new Promise((resolve, reject) => {
+      this.db.run(
         `INSERT INTO comments (id, complaint_id, name, text)
-         VALUES ($1, $2, $3, $4)`,
-        [comment.id, comment.complaintId, comment.name, comment.text]
+         VALUES (?, ?, ?, ?)`,
+        [comment.id, comment.complaintId, comment.name, comment.text],
+        function(err) {
+          if (err) reject(err);
+          else resolve(comment.id);
+        }
       );
-      return comment.id;
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      throw error;
-    }
+    });
   }
 
   // Statistics
-  async getStats() {
-    try {
-      const totalResult = await this.pool.query('SELECT COUNT(*) as count FROM complaints');
-      const pendingResult = await this.pool.query('SELECT COUNT(*) as count FROM complaints WHERE status = $1', ['pending']);
-      const resolvedResult = await this.pool.query('SELECT COUNT(*) as count FROM complaints WHERE status = $1', ['resolved']);
-      
-      const categoryResult = await this.pool.query(`
-        SELECT c.name as category, COUNT(co.id) as count 
-        FROM categories c 
-        LEFT JOIN complaints co ON c.name = co.category 
-        GROUP BY c.name
-      `);
-      
-      const locationResult = await this.pool.query(`
-        SELECT l.name as location, COUNT(co.id) as count 
-        FROM locations l 
-        LEFT JOIN complaints co ON l.name = co.location 
-        GROUP BY l.name
-      `);
+  getStats() {
+    return new Promise((resolve, reject) => {
+      const queries = {
+        total: 'SELECT COUNT(*) as count FROM complaints',
+        pending: 'SELECT COUNT(*) as count FROM complaints WHERE status = "pending"',
+        resolved: 'SELECT COUNT(*) as count FROM complaints WHERE status = "resolved"',
+        byCategory: `
+          SELECT c.name as category, COUNT(co.id) as count 
+          FROM categories c 
+          LEFT JOIN complaints co ON c.name = co.category 
+          GROUP BY c.name
+        `,
+        byLocation: `
+          SELECT l.name as location, COUNT(co.id) as count 
+          FROM locations l 
+          LEFT JOIN complaints co ON l.name = co.location 
+          GROUP BY l.name
+        `
+      };
 
-      const total = parseInt(totalResult.rows[0].count) || 0;
-      const pending = parseInt(pendingResult.rows[0].count) || 0;
-      const resolved = parseInt(resolvedResult.rows[0].count) || 0;
-      
-      const byCategory = {};
-      categoryResult.rows.forEach(row => {
-        byCategory[row.category] = parseInt(row.count) || 0;
-      });
-      
-      const byLocation = {};
-      locationResult.rows.forEach(row => {
-        byLocation[row.location] = parseInt(row.count) || 0;
+      const results = {};
+      const queryPromises = Object.entries(queries).map(([key, query]) => {
+        return new Promise((resolveQuery, rejectQuery) => {
+          if (key === 'byCategory' || key === 'byLocation') {
+            this.db.all(query, (err, rows) => {
+              if (err) rejectQuery(err);
+              else {
+                results[key] = {};
+                rows.forEach(row => {
+                  results[key][row[key.slice(2).toLowerCase()]] = row.count;
+                });
+                resolveQuery();
+              }
+            });
+          } else {
+            this.db.get(query, (err, row) => {
+              if (err) rejectQuery(err);
+              else {
+                results[key] = row.count;
+                resolveQuery();
+              }
+            });
+          }
+        });
       });
 
-      return { total, pending, resolved, byCategory, byLocation };
-    } catch (error) {
-      console.error('Error getting stats:', error);
-      throw error;
-    }
+      Promise.all(queryPromises)
+        .then(() => resolve(results))
+        .catch(reject);
+    });
   }
 
   // Close database connection
-  async close() {
-    try {
-      await this.pool.end();
-      console.log('✅ Database connection closed');
-    } catch (error) {
-      console.error('Error closing database:', error);
-    }
+  close() {
+    this.db.close((err) => {
+      if (err) console.error('Error closing database:', err);
+      else console.log('✅ Database connection closed');
+    });
   }
 }
