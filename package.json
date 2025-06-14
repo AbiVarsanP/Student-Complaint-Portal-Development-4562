@@ -22,7 +22,8 @@
     "date-fns": "4.1.0",
     "react-toastify": "^10.0.4",
     "browser-image-compression": "^2.0.2",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
