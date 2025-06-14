@@ -15,17 +15,17 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('adminToken');
+    const token = localStorage.getItem('std-campuz-adminToken');
     if (token) {
       setIsAuthenticated(true);
     }
     setLoading(false);
   }, []);
 
-  const login = (username, password) => {
-    // Simple authentication - in production, use proper backend authentication
-    if (username === 'admin' && password === 'admin123') {
-      localStorage.setItem('adminToken', 'authenticated');
+  const login = async (username, password) => {
+    // Check credentials - Campuz / Campuz@001
+    if (username === 'Campuz' && password === 'Campuz@001') {
+      localStorage.setItem('std-campuz-adminToken', 'authenticated');
       setIsAuthenticated(true);
       return true;
     }
@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('adminToken');
+    localStorage.removeItem('std-campuz-adminToken');
     setIsAuthenticated(false);
   };
 

@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaHeart, FaRegHeart } from 'react-icons/fa';
 import { toast } from 'react-toastify';
+import { useComplaints } from '../context/ComplaintContext';
 
 const SupportButton = ({ 
   complaintId, 
   supportCount = 0, 
-  isSupported = false, 
   onSupport,
   size = 'md',
   showCount = true 
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
+  const { hasUserSupported } = useComplaints();
+
+  useEffect(() => {
+    const checkSupport = async () => {
+      const supported = await hasUserSupported(complaintId);
+      setIsSupported(supported);
+    };
+    checkSupport();
+  }, [complaintId, hasUserSupported]);
 
   const handleSupport = async () => {
     if (isAnimating) return;
@@ -20,6 +30,7 @@ const SupportButton = ({
     
     try {
       const newSupportState = await onSupport(complaintId);
+      setIsSupported(newSupportState);
       
       if (newSupportState) {
         toast.success('Thank you for your support!');

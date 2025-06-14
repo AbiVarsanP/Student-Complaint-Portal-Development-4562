@@ -28,7 +28,7 @@ const AdminLogin = () => {
     setIsLoading(true);
 
     try {
-      const success = login(formData.username, formData.password);
+      const success = await login(formData.username, formData.password);
       
       if (success) {
         toast.success('Login successful!');
@@ -56,7 +56,7 @@ const AdminLogin = () => {
             <FaUserShield className="h-8 w-8 text-primary-600" />
           </div>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Admin Login
+            STD-Campuz Admin
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Access the complaint management system
@@ -104,14 +104,6 @@ const AdminLogin = () => {
                   {showPassword ? <FaEyeSlash /> : <FaEye />}
                 </button>
               </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <strong>Demo Credentials:</strong><br />
-                Username: admin<br />
-                Password: admin123
-              </p>
             </div>
 
             <button

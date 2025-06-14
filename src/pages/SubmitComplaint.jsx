@@ -38,7 +38,7 @@ const SubmitComplaint = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.title.trim() || !formData.description.trim() || !formData.category || !formData.location) {
+    if (!formData.title.trim() || !formData.description.trim() || !formData.category) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -46,7 +46,7 @@ const SubmitComplaint = () => {
     setIsSubmitting(true);
 
     try {
-      const complaintId = addComplaint(formData);
+      const complaintId = await addComplaint(formData);
       toast.success('Complaint submitted successfully!');
       
       // Reset form
@@ -151,13 +151,12 @@ const SubmitComplaint = () => {
                 <div>
                   <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                     <FaMapMarkerAlt className="w-4 h-4 mr-2 text-gray-400" />
-                    Location *
+                    Location (Optional)
                   </label>
                   <select
                     name="location"
                     value={formData.location}
                     onChange={handleInputChange}
-                    required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
                   >
                     <option value="">Select a location</option>

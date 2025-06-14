@@ -36,11 +36,12 @@ export const ComplaintProvider = ({ children }) => {
     'Main Gate',
     'Administrative Block'
   ]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedComplaints = localStorage.getItem('complaints');
-    const savedCategories = localStorage.getItem('categories');
-    const savedLocations = localStorage.getItem('locations');
+    const savedComplaints = localStorage.getItem('std-campuz-complaints');
+    const savedCategories = localStorage.getItem('std-campuz-categories');
+    const savedLocations = localStorage.getItem('std-campuz-locations');
     
     if (savedComplaints) {
       setComplaints(JSON.parse(savedComplaints));
@@ -53,15 +54,17 @@ export const ComplaintProvider = ({ children }) => {
     if (savedLocations) {
       setLocations(JSON.parse(savedLocations));
     }
+    
+    setLoading(false);
   }, []);
 
   const saveToStorage = (complaintsData, categoriesData = categories, locationsData = locations) => {
-    localStorage.setItem('complaints', JSON.stringify(complaintsData));
-    localStorage.setItem('categories', JSON.stringify(categoriesData));
-    localStorage.setItem('locations', JSON.stringify(locationsData));
+    localStorage.setItem('std-campuz-complaints', JSON.stringify(complaintsData));
+    localStorage.setItem('std-campuz-categories', JSON.stringify(categoriesData));
+    localStorage.setItem('std-campuz-locations', JSON.stringify(locationsData));
   };
 
-  const addComplaint = (complaint) => {
+  const addComplaint = async (complaint) => {
     const newComplaint = {
       id: uuidv4(),
       ...complaint,
@@ -79,7 +82,7 @@ export const ComplaintProvider = ({ children }) => {
     return newComplaint.id;
   };
 
-  const updateComplaintStatus = (id, status) => {
+  const updateComplaintStatus = async (id, status) => {
     const updatedComplaints = complaints.map(complaint =>
       complaint.id === id ? { ...complaint, status } : complaint
     );
@@ -87,13 +90,13 @@ export const ComplaintProvider = ({ children }) => {
     saveToStorage(updatedComplaints);
   };
 
-  const deleteComplaint = (id) => {
+  const deleteComplaint = async (id) => {
     const updatedComplaints = complaints.filter(complaint => complaint.id !== id);
     setComplaints(updatedComplaints);
     saveToStorage(updatedComplaints);
   };
 
-  const addCategory = (category) => {
+  const addCategory = async (category) => {
     if (!categories.includes(category)) {
       const updatedCategories = [...categories, category];
       setCategories(updatedCategories);
@@ -101,13 +104,13 @@ export const ComplaintProvider = ({ children }) => {
     }
   };
 
-  const deleteCategory = (category) => {
+  const deleteCategory = async (category) => {
     const updatedCategories = categories.filter(cat => cat !== category);
     setCategories(updatedCategories);
     saveToStorage(complaints, updatedCategories, locations);
   };
 
-  const addLocation = (location) => {
+  const addLocation = async (location) => {
     if (!locations.includes(location)) {
       const updatedLocations = [...locations, location];
       setLocations(updatedLocations);
@@ -115,13 +118,13 @@ export const ComplaintProvider = ({ children }) => {
     }
   };
 
-  const deleteLocation = (location) => {
+  const deleteLocation = async (location) => {
     const updatedLocations = locations.filter(loc => loc !== location);
     setLocations(updatedLocations);
     saveToStorage(complaints, categories, updatedLocations);
   };
 
-  const supportComplaint = (id) => {
+  const supportComplaint = async (id) => {
     const userIdentifier = getUserIdentifier();
     const updatedComplaints = complaints.map(complaint => {
       if (complaint.id === id) {
@@ -149,7 +152,13 @@ export const ComplaintProvider = ({ children }) => {
     return complaint.supportedBy?.includes(userIdentifier);
   };
 
-  const addComment = (complaintId, comment) => {
+  const hasUserSupported = async (complaintId) => {
+    const userIdentifier = getUserIdentifier();
+    const complaint = complaints.find(c => c.id === complaintId);
+    return complaint?.supportedBy?.includes(userIdentifier) || false;
+  };
+
+  const addComment = async (complaintId, comment) => {
     const newComment = {
       id: uuidv4(),
       ...comment,
@@ -172,21 +181,15 @@ export const ComplaintProvider = ({ children }) => {
   };
 
   const getUserIdentifier = () => {
-    let identifier = localStorage.getItem('userIdentifier');
+    let identifier = localStorage.getItem('std-campuz-userIdentifier');
     if (!identifier) {
       identifier = uuidv4();
-      localStorage.setItem('userIdentifier', identifier);
+      localStorage.setItem('std-campuz-userIdentifier', identifier);
     }
     return identifier;
   };
 
-  const hasUserSupported = (complaintId) => {
-    const userIdentifier = getUserIdentifier();
-    const complaint = complaints.find(c => c.id === complaintId);
-    return complaint?.supportedBy?.includes(userIdentifier) || false;
-  };
-
-  const getComplaintStats = () => {
+  const getComplaintStats = async () => {
     const total = complaints.length;
     const pending = complaints.filter(c => c.status === 'pending').length;
     const resolved = complaints.filter(c => c.status === 'resolved').length;
@@ -206,6 +209,7 @@ export const ComplaintProvider = ({ children }) => {
     complaints,
     categories,
     locations,
+    loading,
     addComplaint,
     updateComplaintStatus,
     deleteComplaint,
@@ -216,7 +220,8 @@ export const ComplaintProvider = ({ children }) => {
     supportComplaint,
     hasUserSupported,
     addComment,
-    getComplaintStats
+    getComplaintStats,
+    refreshData: () => {} // Placeholder for API compatibility
   };
 
   return (

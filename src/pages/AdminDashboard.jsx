@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
@@ -7,7 +7,21 @@ import { useComplaints } from '../context/ComplaintContext';
 
 const AdminDashboard = () => {
   const { getComplaintStats } = useComplaints();
-  const stats = getComplaintStats();
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    resolved: 0,
+    byCategory: {},
+    byLocation: {}
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const statsData = await getComplaintStats();
+      setStats(statsData);
+    };
+    fetchStats();
+  }, [getComplaintStats]);
 
   const statsCards = [
     {
@@ -204,14 +218,14 @@ const AdminDashboard = () => {
                 View All Complaints
               </Link>
               <Link
-                to="/admin/complaints?filter=pending"
+                to="/admin/complaints"
                 className="flex items-center justify-center p-4 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors font-medium"
               >
                 <FaClock className="w-5 h-5 mr-2" />
                 Pending Complaints
               </Link>
               <Link
-                to="/admin/complaints?filter=resolved"
+                to="/admin/complaints"
                 className="flex items-center justify-center p-4 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors font-medium"
               >
                 <FaCheckCircle className="w-5 h-5 mr-2" />

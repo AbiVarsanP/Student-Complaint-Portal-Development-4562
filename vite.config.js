@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Student Complaint Portal',
-        short_name: 'Complaints',
-        description: 'Submit and manage student complaints efficiently',
+        name: 'STD-Campuz Portal',
+        short_name: 'STD-Campuz',
+        description: 'Student complaint management system for campus issues',
         theme_color: '#2563eb',
         background_color: '#ffffff',
         display: 'standalone',

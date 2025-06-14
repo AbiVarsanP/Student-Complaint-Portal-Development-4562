@@ -34,7 +34,7 @@ const Navbar = () => {
                 whileHover={{ scale: 1.05 }}
                 className="text-2xl font-bold text-primary-600"
               >
-                🎓 Student Portal
+                🎓 STD-Campuz
               </motion.div>
             </Link>
           </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { FaFileAlt, FaUsers, FaChartBar, FaShieldAlt, FaHeart, FaComment, FaMapMarkerAlt, FaEye, FaTimes, FaUser, FaEnvelope, FaCalendar } from 'react-icons/fa';
+import { FaFileAlt, FaUsers, FaChartBar, FaShieldAlt, FaComment, FaMapMarkerAlt, FaEye, FaTimes, FaUser, FaEnvelope, FaCalendar } from 'react-icons/fa';
 import { useComplaints } from '../context/ComplaintContext';
 import SupportButton from '../components/SupportButton';
 import ImageGallery from '../components/ImageGallery';
@@ -12,8 +12,8 @@ const Home = () => {
   const { 
     complaints, 
     supportComplaint, 
-    hasUserSupported, 
-    addComment 
+    addComment,
+    loading
   } = useComplaints();
   
   const [selectedComplaint, setSelectedComplaint] = useState(null);
@@ -25,11 +25,21 @@ const Home = () => {
     .slice(0, showAllComplaints ? complaints.length : 6);
 
   const handleSupport = async (complaintId) => {
-    return supportComplaint(complaintId);
+    try {
+      return await supportComplaint(complaintId);
+    } catch (error) {
+      console.error('Error supporting complaint:', error);
+      throw error;
+    }
   };
 
   const handleAddComment = async (complaintId, comment) => {
-    return addComment(complaintId, comment);
+    try {
+      return await addComment(complaintId, comment);
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      throw error;
+    }
   };
 
   const features = [
@@ -70,6 +80,14 @@ const Home = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -82,10 +100,10 @@ const Home = () => {
             className="text-center"
           >
             <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-6">
-              Student Complaint Portal
+              STD-Campuz Portal
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl mb-8 text-primary-100">
-              Your voice matters. Submit complaints and help improve our college experience.
+              Your voice matters. Submit complaints and help improve our campus experience.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
@@ -230,7 +248,7 @@ const Home = () => {
                           <SupportButton
                             complaintId={complaint.id}
                             supportCount={complaint.supportCount || 0}
-                            isSupported={hasUserSupported(complaint.id)}
+                            isSupported={false} // Will be updated via API
                             onSupport={handleSupport}
                             size="sm"
                           />
@@ -281,7 +299,7 @@ const Home = () => {
             </h2>
             <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
               Join hundreds of students who have already used our platform to improve 
-              their college experience. Your feedback drives positive change.
+              their campus experience. Your feedback drives positive change.
             </p>
             <Link
               to="/submit"
@@ -346,7 +364,7 @@ const Home = () => {
                     <SupportButton
                       complaintId={selectedComplaint.id}
                       supportCount={selectedComplaint.supportCount || 0}
-                      isSupported={hasUserSupported(selectedComplaint.id)}
+                      isSupported={false} // Will be updated via API
                       onSupport={handleSupport}
                       size="md"
                     />
