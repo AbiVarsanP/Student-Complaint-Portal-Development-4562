@@ -13,7 +13,8 @@ const SupportButton = ({
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
-  const { hasUserSupported } = useComplaints();
+  const [currentSupportCount, setCurrentSupportCount] = useState(supportCount);
+  const { hasUserSupported, complaints } = useComplaints();
 
   useEffect(() => {
     const checkSupport = async () => {
@@ -23,6 +24,14 @@ const SupportButton = ({
     checkSupport();
   }, [complaintId, hasUserSupported]);
 
+  useEffect(() => {
+    // Update support count when complaints change
+    const complaint = complaints.find(c => c.id === complaintId);
+    if (complaint) {
+      setCurrentSupportCount(complaint.supportCount || 0);
+    }
+  }, [complaints, complaintId]);
+
   const handleSupport = async () => {
     if (isAnimating) return;
     
@@ -31,6 +40,9 @@ const SupportButton = ({
     try {
       const newSupportState = await onSupport(complaintId);
       setIsSupported(newSupportState);
+      
+      // Update local count immediately for better UX
+      setCurrentSupportCount(prev => newSupportState ? prev + 1 : Math.max(0, prev - 1));
       
       if (newSupportState) {
         toast.success('Thank you for your support!');
@@ -85,7 +97,7 @@ const SupportButton = ({
       
       {showCount && (
         <span className="font-semibold">
-          {supportCount > 0 ? supportCount : 'Support'}
+          {currentSupportCount > 0 ? currentSupportCount : 'Support'}
         </span>
       )}
     </motion.button>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { FaFileAlt, FaUsers, FaChartBar, FaShieldAlt, FaComment, FaMapMarkerAlt, FaEye, FaTimes, FaUser, FaEnvelope, FaCalendar } from 'react-icons/fa';
+import { FaFileAlt, FaUsers, FaChartBar, FaShieldAlt, FaComment, FaMapMarkerAlt, FaEye, FaTimes, FaUser, FaEnvelope, FaCalendar, FaSync } from 'react-icons/fa';
 import { useComplaints } from '../context/ComplaintContext';
 import SupportButton from '../components/SupportButton';
 import ImageGallery from '../components/ImageGallery';
@@ -13,11 +13,13 @@ const Home = () => {
     complaints, 
     supportComplaint, 
     addComment,
-    loading
+    loading,
+    refreshData
   } = useComplaints();
   
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [showAllComplaints, setShowAllComplaints] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Get recent complaints for public view
   const recentComplaints = complaints
@@ -40,6 +42,13 @@ const Home = () => {
       console.error('Error adding comment:', error);
       throw error;
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+    refreshData();
+    setIsRefreshing(false);
   };
 
   const features = [
@@ -178,9 +187,19 @@ const Home = () => {
               transition={{ duration: 0.8, delay: 0.4 }}
             >
               <div className="text-center mb-12">
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">
-                  Recent Complaints
-                </h2>
+                <div className="flex items-center justify-center space-x-4 mb-4">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                    Recent Complaints
+                  </h2>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="flex items-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                  >
+                    <FaSync className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
                 <p className="text-lg text-gray-600">
                   See what issues your fellow students are raising and show your support
                 </p>
@@ -248,7 +267,6 @@ const Home = () => {
                           <SupportButton
                             complaintId={complaint.id}
                             supportCount={complaint.supportCount || 0}
-                            isSupported={false} // Will be updated via API
                             onSupport={handleSupport}
                             size="sm"
                           />
@@ -364,7 +382,6 @@ const Home = () => {
                     <SupportButton
                       complaintId={selectedComplaint.id}
                       supportCount={selectedComplaint.supportCount || 0}
-                      isSupported={false} // Will be updated via API
                       onSupport={handleSupport}
                       size="md"
                     />
